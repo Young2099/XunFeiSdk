@@ -7,12 +7,15 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.support.annotation.RequiresApi;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.DividerItemDecoration;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.RecyclerView.OnScrollListener;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
@@ -45,7 +48,11 @@ public class MainActivity extends AppCompatActivity implements AIUIView {
     private RecyclerView mRecyclerView;
     private RecyclerView hotWordRecycler;
     private boolean isTouch = false;
+    VoiceAdapter adapter;
+    final List<String> list = new ArrayList<>();
+    private boolean isFlag;
 
+    @RequiresApi(api = Build.VERSION_CODES.M)
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         this.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -56,12 +63,13 @@ public class MainActivity extends AppCompatActivity implements AIUIView {
         aiuiRepository.initAIUIAgent();
 //        aiuiRepository.getContract();
         initLayout();
-
     }
 
     /**
      * 初始化Layout。
      */
+
+    @RequiresApi(api = Build.VERSION_CODES.M)
     @SuppressLint("ClickableViewAccessibility")
     private void initLayout() {
         mStartRecord = findViewById(R.id.circle);
@@ -87,12 +95,32 @@ public class MainActivity extends AppCompatActivity implements AIUIView {
             }
         });
 
+        for (int i = 0; i < 18; i++) {
+            list.add("今天天气怎么样");
+            list.add("西瓜用英文怎么说");
+            list.add("九九乘法表");
+            list.add("朗读一首李白的诗");
+            list.add("安静的静怎么写");
+            list.add("魑魅魍魉是啥意思");
+            list.add("给中国移动打电话");
+            list.add("周杰伦是谁");
+            list.add("我要查清华大学的分数线");
+            list.add("给我来个段子");
+            list.add("北京有哪些大学");
+            list.add("历史上的今天发生了什么");
+            list.add("我要学英语");
+            list.add("难过的反义词");
+            list.add("关于励志的经典语句");
+            list.add("给我来个演说");
+            list.add("来一句英语");
+        }
         mStartRecord.setOnClickListener(new CircleButtonView.OnClickListener() {
             @Override
             public void onClick() {
                 aiuiRepository.stopAudio();
             }
         });
+
         mRecyclerView.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
@@ -104,32 +132,12 @@ public class MainActivity extends AppCompatActivity implements AIUIView {
                     case MotionEvent.ACTION_MOVE:
                         float d = event.getY() - dy;
                         Log.e(TAG, "onTouch: " + d);
-                        if (d < -400) {
-                            List<String> list = new ArrayList<>();
-
-                            for (int i = 0; i < 18;i++ ) {
-                                list.add("今天天气怎么样");
-                                list.add("西瓜用英文怎么说");
-                                list.add("九九乘法表");
-                                list.add("朗读一首李白的诗");
-                                list.add("安静的静怎么写");
-                                list.add("魑魅魍魉是啥意思");
-                                list.add("给中国移动打电话");
-                                list.add("周杰伦是谁");
-                                list.add("我要查清华大学的分数线");
-                                list.add("给我来个段子");
-                                list.add("北京有哪些大学");
-                                list.add("历史上的今天发生了什么");
-                                list.add("我要学英语");
-                                list.add("难过的反义词");
-                                list.add("关于励志的经典语句");
-                                list.add("给我来个演说");
-                                list.add("来一句英语");
-                            }
+                        if (d < -400 ) {
                             final HotWordAdapter voiceAdapter = new HotWordAdapter(list);
                             mRecyclerView.setVisibility(View.GONE);
                             hotWordRecycler.setLayoutManager(new LinearLayoutManager(MainActivity.this));
                             hotWordRecycler.setVisibility(View.VISIBLE);
+
                             int resId = R.anim.layout_animation_fall_down;
                             LayoutAnimationController animation = AnimationUtils.loadLayoutAnimation(SoApp.mContext, resId);
                             hotWordRecycler.setLayoutAnimation(animation);
@@ -158,7 +166,7 @@ public class MainActivity extends AppCompatActivity implements AIUIView {
                             hotWordRecycler.setVisibility(View.GONE);
                             mRecyclerView.setVisibility(View.VISIBLE);
                             isTouch = false;
-                        }else {
+                        } else {
                             isTouch = true;
                         }
                         break;
@@ -238,13 +246,14 @@ public class MainActivity extends AppCompatActivity implements AIUIView {
     public void showErrorMessage(String error) {
         Toast.makeText(this, error, Toast.LENGTH_SHORT).show();
     }
-
+    private List<RawMessage> currentList;
     @Override
     public void showText(List<RawMessage> list) {
-
-        final VoiceAdapter adapter = new VoiceAdapter(list);
-        mRecyclerView.addItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.VERTICAL));
+        currentList = list;
+        adapter = new VoiceAdapter(list);
         mRecyclerView.setAdapter(adapter);
+        mRecyclerView.scrollToPosition(adapter.getItemCount()-1);
+
     }
 
 }

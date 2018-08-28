@@ -57,11 +57,8 @@ public class AIUIRepository {
     private String phone_number;
 
     //处理PGS听写(流式听写）的队列
-    private String[] mIATPGSStack = new String[256];
-    private List<String> mInterResultStack = new ArrayList<>();
-
-    //当前未结束的语音交互消息，更新语音消息的听写内容时使用
-    private RawMessage mAppendVoiceMsg = null;
+    private String voiceWords;
+    private List<RawMessage> rawMessageList = new ArrayList<>();
 
     public AIUIRepository(Context mainActivity) {
         this.context = mainActivity;
@@ -330,17 +327,32 @@ public class AIUIRepository {
         String normValue = null;
         String service;
         String intentService = null;
+        RawMessage rawMessage ;
+
         JsonObject object = new JsonParser().parse(semanticResult).getAsJsonObject();
         if (object.get("rc").getAsInt() == 2) {
-            mView.showErrorMessage("识别出错");
+            rawMessage = new RawMessage();
+            rawMessage.setVoice(voiceWords);
+            rawMessage.setMessage("识别出错");
+            rawMessageList.add(rawMessage);
+            mView.showText(rawMessageList);
         } else if (object.get("rc").getAsInt() == 4) {
             mView.showErrorMessage("暂时不支持该功能");
+            rawMessage = new RawMessage();
+            rawMessage.setVoice(voiceWords);
+            rawMessage.setMessage("暂时不支持该功能");
+            rawMessageList.add(rawMessage);
+            mView.showText(rawMessageList);
         } else {
-
             if (object.has("answer")) {
                 JsonObject jsonObject = object.getAsJsonObject("answer");
                 String text = jsonObject.get("text").getAsString();
-
+                Log.e(TAG, "getJsonString: " + text + "" + voiceWords);
+                rawMessage = new RawMessage();
+                rawMessage.setVoice(voiceWords);
+                rawMessage.setMessage(text);
+                rawMessageList.add(rawMessage);
+                mView.showText(rawMessageList);
             }
             if (object.has("semantic")) {
                 JsonArray data = object.get("semantic").getAsJsonArray();
@@ -387,6 +399,7 @@ public class AIUIRepository {
     }
 
     private void updateVoiceMessageFromIAT(JSONObject cntJson) {
+        Log.e(TAG, "updateVoiceMessageFromIAT: "+cntJson );
         JSONObject text = cntJson.optJSONObject("text");
         // 解析拼接此次听写结果
         StringBuilder iatText = new StringBuilder();
@@ -398,83 +411,10 @@ public class AIUIRepository {
                 iatText.append(charWord.optJSONObject(cIndex).opt("w"));
             }
         }
-
-        String voiceIAT = "";
-        String pgsMode = text.optString("pgs");
-        //非PGS模式结果
-        if (TextUtils.isEmpty(pgsMode)) {
-            if (TextUtils.isEmpty(iatText)) return;
-
-            //和上一次结果进行拼接
-            voiceIAT += iatText;
-            Log.e(TAG, "updateVoiceMessageFromIAT: " + voiceIAT);
-
-        } else {
-            int serialNumber = text.optInt("sn");
-            mIATPGSStack[serialNumber] = iatText.toString();
-            //pgs结果两种模式rpl和apd模式（替换和追加模式）
-            if ("rpl".equals(pgsMode)) {
-                //根据replace指定的range，清空stack中对应位置值
-                JSONArray replaceRange = text.optJSONArray("rg");
-                int start = 0;
-                int end = 0;
-                try {
-                    start = replaceRange.getInt(0);
-                    end = replaceRange.getInt(1);
-
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-
-                for (int index = start; index <= end; index++) {
-                    mIATPGSStack[index] = null;
-                }
-            }
-
-            StringBuilder PGSResult = new StringBuilder();
-            //汇总stack经过操作后的剩余的有效结果信息
-            for (int index = 0; index < mIATPGSStack.length; index++) {
-                if (TextUtils.isEmpty(mIATPGSStack[index])) continue;
-
-//                if(!TextUtils.isEmpty(PGSResult.toString())) PGSResult.append("\n");
-                PGSResult.append(mIATPGSStack[index]);
-                //如果是最后一条听写结果，则清空stack便于下次使用
-                if (lastResult) {
-                    mIATPGSStack[index] = null;
-                }
-            }
-            voiceIAT = join(mInterResultStack) + PGSResult.toString();
-
-            if (lastResult) {
-                mInterResultStack.add(PGSResult.toString());
-            }
-
-            if (!TextUtils.isEmpty(voiceIAT)) {
-                mAppendVoiceMsg.cacheContent = voiceIAT;
-                updateMessage(mAppendVoiceMsg);
-            }
+        if(!TextUtils.isEmpty(iatText)) {
+            voiceWords = iatText.toString();
         }
 
-    }
-    /**
-     * 更新消息列表中的消息内容
-     * @param message
-     */
-    public void updateMessage(final RawMessage message){
-        if(message == null) return;
-        Completable
-                .complete()
-                .observeOn(Schedulers.io())
-                .subscribe(() -> mMessageDao.updateMessage(message));
-    }
-
-    private String join(List<String> data) {
-        StringBuilder builder = new StringBuilder();
-        for (int index = 0; index < data.size(); index++) {
-            builder.append(data.get(index));
-        }
-
-        return builder.toString();
     }
 
     private void updateMessageFromItrans(String sid, JSONObject params, JSONObject cntJson, long rspTime) {

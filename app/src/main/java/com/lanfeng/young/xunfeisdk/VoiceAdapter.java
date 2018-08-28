@@ -36,6 +36,11 @@ class VoiceAdapter extends RecyclerView.Adapter<VoiceAdapter.BaseViewHolder> {
         return list.size();
     }
 
+    public void addItem(RawMessage rawMessage) {
+        Log.e("TAG", "addItem: "+rawMessage.toString() );
+        list.add(list.size(),rawMessage);
+    }
+
     public class BaseViewHolder extends RecyclerView.ViewHolder{
         TextView message;
         TextView voice;
