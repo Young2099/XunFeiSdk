@@ -3,7 +3,9 @@ package com.lanfeng.young.xunfeisdk.speech;
 import android.arch.lifecycle.MutableLiveData;
 import android.content.Context;
 import android.content.res.AssetManager;
+import android.support.v4.util.SimpleArrayMap;
 import android.text.TextUtils;
+import android.util.ArrayMap;
 import android.util.Base64;
 import android.util.Log;
 import android.widget.Toast;
@@ -19,6 +21,8 @@ import com.iflytek.aiui.AIUIListener;
 import com.iflytek.aiui.AIUIMessage;
 import com.lanfeng.young.xunfeisdk.ContactRepository;
 import com.lanfeng.young.xunfeisdk.DynamicEntityData;
+import com.lanfeng.young.xunfeisdk.R;
+import com.lanfeng.young.xunfeisdk.RawMessage;
 import com.lanfeng.young.xunfeisdk.SingleLiveEvent;
 
 import org.json.JSONArray;
@@ -41,13 +45,11 @@ public class AIUIRepository {
     private int mCurrentState = AIUIConstant.STATE_IDLE;
     private AIUIAgent mAIUIAgent = null;
     private Context context;
-    private int mAIUIState;
     //是否检测到前端点，提示 ’为说话‘ 时判断使用
     private boolean mVadBegin = false;
     private AIUIView mView;
     private ContactRepository contactRepository;
     private JSONObject mPersParams;
-    private MutableLiveData<String> mUID = new MutableLiveData<>();
     //vad事件
     private MutableLiveData<AIUIEvent> mVADEvent = new MutableLiveData<>();
     //唤醒和休眠事件
@@ -57,6 +59,9 @@ public class AIUIRepository {
     //处理PGS听写(流式听写）的队列
     private String[] mIATPGSStack = new String[256];
     private List<String> mInterResultStack = new ArrayList<>();
+
+    //当前未结束的语音交互消息，更新语音消息的听写内容时使用
+    private RawMessage mAppendVoiceMsg = null;
 
     public AIUIRepository(Context mainActivity) {
         this.context = mainActivity;
@@ -276,7 +281,6 @@ public class AIUIRepository {
             JSONObject content = data.getJSONArray("content").getJSONObject(0);
 
             long rspTime = event.data.getLong("eos_rslt", -1);  //响应时间
-
             if (content.has("cnt_id")) {
                 String cnt_id = content.getString("cnt_id");
                 JSONObject cntJson = new JSONObject(new String(event.data.getByteArray(cnt_id), "utf-8"));
@@ -300,6 +304,7 @@ public class AIUIRepository {
         } catch (Throwable e) {
             e.printStackTrace();
         }
+
     }
 
     /**
@@ -322,6 +327,7 @@ public class AIUIRepository {
      */
     private void getJsonString(String semanticResult) {
         String value = null;
+        String normValue = null;
         String service;
         String intentService = null;
         JsonObject object = new JsonParser().parse(semanticResult).getAsJsonObject();
@@ -330,37 +336,57 @@ public class AIUIRepository {
         } else if (object.get("rc").getAsInt() == 4) {
             mView.showErrorMessage("暂时不支持该功能");
         } else {
-            JsonArray data = object.get("semantic").getAsJsonArray();
-            service = object.get("service").getAsString();
 
-            for (JsonElement jsonElement : data) {
-                JsonObject jsonObject = jsonElement.getAsJsonObject();
-                JsonArray slots = jsonObject.getAsJsonArray("slots");
-                intentService = jsonObject.get("intent").getAsString();
-                for (int i = 0; i < slots.size(); i++) {
-                    JsonObject object1 = slots.get(0).getAsJsonObject();
-                    value = object1.get("value").getAsString();
-                }
+            if (object.has("answer")) {
+                JsonObject jsonObject = object.getAsJsonObject("answer");
+                String text = jsonObject.get("text").getAsString();
 
             }
-            Log.e(TAG, "getJsonString: " + value + "::::" + service + "::::" + intentService);
-            if (intentService != null) {
-                if (intentService.equals("DIAL")) {
-                    //保存电话号码
-                    if (value != null && !TextUtils.isEmpty(value)) {
-                        phone_number = value;
+            if (object.has("semantic")) {
+                JsonArray data = object.get("semantic").getAsJsonArray();
+                service = object.get("service").getAsString();
+                for (JsonElement jsonElement : data) {
+                    JsonObject jsonObject = jsonElement.getAsJsonObject();
+                    JsonArray slots = jsonObject.getAsJsonArray("slots");
+                    intentService = jsonObject.get("intent").getAsString();
+                    for (int i = 0; i < slots.size(); i++) {
+                        JsonObject object1 = slots.get(0).getAsJsonObject();
+                        value = object1.get("value").getAsString();
+                        if (object1.has("normValue")) {
+                            normValue = object1.get("normValue").getAsString();
+                        }
+                    }
+
+                }
+                Log.e(TAG, "getJsonString: " + value + "::::" + service + "::::" + intentService);
+                if (intentService != null) {
+                    if (intentService.equals("DIAL")) {
+                        //保存电话号码
+                        if (value != null && !TextUtils.isEmpty(value)) {
+                            phone_number = value;
+                        }
                     }
                 }
-            }
-            if ("telephone".equals(service) && "CONFIRM".equals(value)) {
-                mView.showContent(service, phone_number);
-            }
+                if ("telephone".equals(service) && "CONFIRM".equals(value) && "INSTRUCTION".equals(intentService)) {
+                    mView.showContent(service, phone_number);
+                }
 
+                //自定义字段，讯飞国搜客户端跳转网页
+                if ("GUOSOU.open_web".equals(service) && "open_web".equals(intentService)) {
+                    mView.showContent(intentService, normValue);
+                }
+
+                //跳转App
+                if ("app".equals(service) && "LAUNCH".equals(intentService)) {
+                    mView.showContent(intentService, value);
+                }
+
+            }
         }
+
     }
 
     private void updateVoiceMessageFromIAT(JSONObject cntJson) {
-
         JSONObject text = cntJson.optJSONObject("text");
         // 解析拼接此次听写结果
         StringBuilder iatText = new StringBuilder();
@@ -373,7 +399,6 @@ public class AIUIRepository {
             }
         }
 
-
         String voiceIAT = "";
         String pgsMode = text.optString("pgs");
         //非PGS模式结果
@@ -383,6 +408,7 @@ public class AIUIRepository {
             //和上一次结果进行拼接
             voiceIAT += iatText;
             Log.e(TAG, "updateVoiceMessageFromIAT: " + voiceIAT);
+
         } else {
             int serialNumber = text.optInt("sn");
             mIATPGSStack[serialNumber] = iatText.toString();
@@ -422,9 +448,24 @@ public class AIUIRepository {
             if (lastResult) {
                 mInterResultStack.add(PGSResult.toString());
             }
-            Log.e(TAG, "updateVoiceMessageFromIAT: " + voiceIAT);
+
+            if (!TextUtils.isEmpty(voiceIAT)) {
+                mAppendVoiceMsg.cacheContent = voiceIAT;
+                updateMessage(mAppendVoiceMsg);
+            }
         }
 
+    }
+    /**
+     * 更新消息列表中的消息内容
+     * @param message
+     */
+    public void updateMessage(final RawMessage message){
+        if(message == null) return;
+        Completable
+                .complete()
+                .observeOn(Schedulers.io())
+                .subscribe(() -> mMessageDao.updateMessage(message));
     }
 
     private String join(List<String> data) {
@@ -438,6 +479,7 @@ public class AIUIRepository {
 
     private void updateMessageFromItrans(String sid, JSONObject params, JSONObject cntJson, long rspTime) {
         String text = "";
+        Log.e(TAG, "updateMessageFromItrans: " + sid);
 
         try {
             cntJson.put("sid", sid);
