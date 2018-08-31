@@ -1,6 +1,7 @@
 package com.lanfeng.young.xunfeisdk;
 
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,6 +16,7 @@ class HotWordAdapter extends RecyclerView.Adapter<HotWordAdapter.BaseViewHolder>
     private List<String> list;
     public HotWordAdapter(List<String> list) {
         this.list =list;
+        Log.e("TAG", "HotWordAdapter: "+list.size() );
     }
 
     @Override

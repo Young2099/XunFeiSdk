@@ -3,9 +3,7 @@ package com.lanfeng.young.xunfeisdk.speech;
 import android.arch.lifecycle.MutableLiveData;
 import android.content.Context;
 import android.content.res.AssetManager;
-import android.support.v4.util.SimpleArrayMap;
 import android.text.TextUtils;
-import android.util.ArrayMap;
 import android.util.Base64;
 import android.util.Log;
 import android.widget.Toast;
@@ -21,7 +19,6 @@ import com.iflytek.aiui.AIUIListener;
 import com.iflytek.aiui.AIUIMessage;
 import com.lanfeng.young.xunfeisdk.ContactRepository;
 import com.lanfeng.young.xunfeisdk.DynamicEntityData;
-import com.lanfeng.young.xunfeisdk.R;
 import com.lanfeng.young.xunfeisdk.RawMessage;
 import com.lanfeng.young.xunfeisdk.SingleLiveEvent;
 
@@ -323,44 +320,45 @@ public class AIUIRepository {
      * @param semanticResult
      */
     private void getJsonString(String semanticResult) {
+        //主要用于拨打电话的确定
         String value = null;
+        //用于打开网址的url
         String normValue = null;
+        //所需要的服务
         String service;
-        String intentService = null;
-        RawMessage rawMessage ;
-
+        //意图
+        String intent = null;
+        //语音识别返回的基本文本
+        String text = null;
+        //如天气返回的数据
+        JsonObject result = null;
         JsonObject object = new JsonParser().parse(semanticResult).getAsJsonObject();
+        service = object.get("service").getAsString();
         if (object.get("rc").getAsInt() == 2) {
-            rawMessage = new RawMessage();
-            rawMessage.setVoice(voiceWords);
-            rawMessage.setMessage("识别出错");
-            rawMessageList.add(rawMessage);
-            mView.showText(rawMessageList);
+            setListMessage("无法理解", service, null);
         } else if (object.get("rc").getAsInt() == 4) {
-            mView.showErrorMessage("暂时不支持该功能");
-            rawMessage = new RawMessage();
-            rawMessage.setVoice(voiceWords);
-            rawMessage.setMessage("暂时不支持该功能");
-            rawMessageList.add(rawMessage);
-            mView.showText(rawMessageList);
+            setListMessage("无法理解", service, null);
         } else {
+            //基本回答的结果
             if (object.has("answer")) {
                 JsonObject jsonObject = object.getAsJsonObject("answer");
-                String text = jsonObject.get("text").getAsString();
+                text = jsonObject.get("text").getAsString();
                 Log.e(TAG, "getJsonString: " + text + "" + voiceWords);
-                rawMessage = new RawMessage();
-                rawMessage.setVoice(voiceWords);
-                rawMessage.setMessage(text);
-                rawMessageList.add(rawMessage);
-                mView.showText(rawMessageList);
             }
+            //如天气回答的data数据
+            if (object.has("data")) {
+                result = object.getAsJsonObject("data");
+            }
+            if (!TextUtils.isEmpty(text)) {
+                setListMessage(text, service, result);
+            }
+            //解析关键字段，semantic里面的如自定义动态数据网站url
             if (object.has("semantic")) {
                 JsonArray data = object.get("semantic").getAsJsonArray();
-                service = object.get("service").getAsString();
                 for (JsonElement jsonElement : data) {
                     JsonObject jsonObject = jsonElement.getAsJsonObject();
                     JsonArray slots = jsonObject.getAsJsonArray("slots");
-                    intentService = jsonObject.get("intent").getAsString();
+                    intent = jsonObject.get("intent").getAsString();
                     for (int i = 0; i < slots.size(); i++) {
                         JsonObject object1 = slots.get(0).getAsJsonObject();
                         value = object1.get("value").getAsString();
@@ -368,29 +366,27 @@ public class AIUIRepository {
                             normValue = object1.get("normValue").getAsString();
                         }
                     }
-
                 }
-                Log.e(TAG, "getJsonString: " + value + "::::" + service + "::::" + intentService);
-                if (intentService != null) {
-                    if (intentService.equals("DIAL")) {
+                if (intent != null) {
+                    if (intent.equals("DIAL")) {
                         //保存电话号码
                         if (value != null && !TextUtils.isEmpty(value)) {
                             phone_number = value;
                         }
                     }
                 }
-                if ("telephone".equals(service) && "CONFIRM".equals(value) && "INSTRUCTION".equals(intentService)) {
+                if ("telephone".equals(service) && "CONFIRM".equals(value) && "INSTRUCTION".equals(intent)) {
                     mView.showContent(service, phone_number);
                 }
 
                 //自定义字段，讯飞国搜客户端跳转网页
-                if ("GUOSOU.open_web".equals(service) && "open_web".equals(intentService)) {
-                    mView.showContent(intentService, normValue);
+                if ("GUOSOU.open_web".equals(service) && "open_web".equals(intent)) {
+                    mView.showContent(intent, normValue);
                 }
 
                 //跳转App
-                if ("app".equals(service) && "LAUNCH".equals(intentService)) {
-                    mView.showContent(intentService, value);
+                if ("app".equals(service) && "LAUNCH".equals(intent)) {
+                    mView.showContent(intent, value);
                 }
 
             }
@@ -398,8 +394,18 @@ public class AIUIRepository {
 
     }
 
+    private void setListMessage(String text, String intent, JsonObject result) {
+        RawMessage rawMessage = new RawMessage();
+        rawMessage.setVoice(voiceWords);
+        rawMessage.setMessage(text);
+        rawMessage.setIntent(intent);
+        rawMessage.setJsonObject(result);
+        rawMessageList.add(rawMessage);
+        mView.showText(rawMessageList);
+    }
+
     private void updateVoiceMessageFromIAT(JSONObject cntJson) {
-        Log.e(TAG, "updateVoiceMessageFromIAT: "+cntJson );
+        Log.e(TAG, "updateVoiceMessageFromIAT: " + cntJson);
         JSONObject text = cntJson.optJSONObject("text");
         // 解析拼接此次听写结果
         StringBuilder iatText = new StringBuilder();
@@ -411,7 +417,7 @@ public class AIUIRepository {
                 iatText.append(charWord.optJSONObject(cIndex).opt("w"));
             }
         }
-        if(!TextUtils.isEmpty(iatText)) {
+        if (!TextUtils.isEmpty(iatText)) {
             voiceWords = iatText.toString();
         }
 
@@ -419,8 +425,6 @@ public class AIUIRepository {
 
     private void updateMessageFromItrans(String sid, JSONObject params, JSONObject cntJson, long rspTime) {
         String text = "";
-        Log.e(TAG, "updateMessageFromItrans: " + sid);
-
         try {
             cntJson.put("sid", sid);
 
@@ -453,6 +457,7 @@ public class AIUIRepository {
 
     public void attach(AIUIView mView) {
         this.mView = mView;
+
     }
 
     public void detachView() {
@@ -489,4 +494,11 @@ public class AIUIRepository {
     }
 
 
+    public void initWords() {
+        RawMessage rawMessage = new RawMessage();
+        rawMessage.setVoice(voiceWords);
+        rawMessage.setMessage("你好，young");
+        rawMessageList.add(rawMessage);
+        mView.showText(rawMessageList);
+    }
 }

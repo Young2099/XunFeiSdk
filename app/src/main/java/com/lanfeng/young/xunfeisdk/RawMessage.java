@@ -1,11 +1,23 @@
 package com.lanfeng.young.xunfeisdk;
 
+import com.google.gson.JsonObject;
+
 /**
  * Created by yf on 2018/8/28.
  */
 public class RawMessage {
-    private String voice = "你好，很高兴见到你";
+    private String voice = "";
     private String message = "";
+    private String intent;
+    private JsonObject jsonObject;
+
+    public String getIntent() {
+        return intent;
+    }
+
+    public void setIntent(String intent) {
+        this.intent = intent;
+    }
 
     public String getVoice() {
         return voice;
@@ -21,6 +33,14 @@ public class RawMessage {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    public JsonObject getJsonObject() {
+        return jsonObject;
+    }
+
+    public void setJsonObject(JsonObject jsonObject) {
+        this.jsonObject = jsonObject;
     }
 
     @Override
