@@ -47,10 +47,10 @@ public class AIUIRepository {
     private AIUIView mView;
     private ContactRepository contactRepository;
     private JSONObject mPersParams;
-    //vad事件
-    private MutableLiveData<AIUIEvent> mVADEvent = new MutableLiveData<>();
-    //唤醒和休眠事件
-    private MutableLiveData<AIUIEvent> mStateEvent = new SingleLiveEvent<>();
+//    //vad事件
+//    private MutableLiveData<AIUIEvent> mVADEvent = new MutableLiveData<>();
+//    //唤醒和休眠事件
+//    private MutableLiveData<AIUIEvent> mStateEvent = new SingleLiveEvent<>();
     private String phone_number;
 
     //处理PGS听写(流式听写）的队列
@@ -199,13 +199,13 @@ public class AIUIRepository {
         public void onEvent(AIUIEvent event) {
             switch (event.eventType) {
                 case AIUIConstant.EVENT_WAKEUP: {
-                    mStateEvent.postValue(event);
+//                    mStateEvent.postValue(event);
 
                 }
                 break;
 
                 case AIUIConstant.EVENT_SLEEP: {
-                    mStateEvent.postValue(event);
+//                    mStateEvent.postValue(event);
 
                 }
                 break;
@@ -242,7 +242,7 @@ public class AIUIRepository {
                 break;
 
                 case AIUIConstant.EVENT_VAD: {
-                    mVADEvent.postValue(event);
+//                    mVADEvent.postValue(event);
                     if (AIUIConstant.VAD_BOS == event.arg1) {
                         mVadBegin = true;
                         //找到语音前端点
@@ -325,7 +325,7 @@ public class AIUIRepository {
         //用于打开网址的url
         String normValue = null;
         //所需要的服务
-        String service;
+        String service = null;
         //意图
         String intent = null;
         //语音识别返回的基本文本
@@ -333,11 +333,12 @@ public class AIUIRepository {
         //如天气返回的数据
         JsonObject result = null;
         JsonObject object = new JsonParser().parse(semanticResult).getAsJsonObject();
-        service = object.get("service").getAsString();
-        if (object.get("rc").getAsInt() == 2) {
-            setListMessage("无法理解", service, null);
-        } else if (object.get("rc").getAsInt() == 4) {
-            setListMessage("无法理解", service, null);
+        if (object.has("service")) {
+            service = object.get("service").getAsString();
+        }
+        if (("2").equals(object.get("rc").getAsString()) || ("4").equals(object.get("rc").getAsString())
+                || ("3").equals(object.get("rc").getAsString())) {
+            setListMessage("对不起主人，不能识别", service, null);
         } else {
             //基本回答的结果
             if (object.has("answer")) {
@@ -375,6 +376,7 @@ public class AIUIRepository {
                         }
                     }
                 }
+                Log.e(TAG, "getJsonString: "+intent+"service:"+service+"value:"+value );
                 if ("telephone".equals(service) && "CONFIRM".equals(value) && "INSTRUCTION".equals(intent)) {
                     mView.showContent(service, phone_number);
                 }
@@ -383,7 +385,9 @@ public class AIUIRepository {
                 if ("GUOSOU.open_web".equals(service) && "open_web".equals(intent)) {
                     mView.showContent(intent, normValue);
                 }
-
+                //定义搜索词，进入到国搜页面搜索
+                if ("GUOSOU.chinaso_search".equals(service) && "chinaso_search".equals(intent)) {
+                }
                 //跳转App
                 if ("app".equals(service) && "LAUNCH".equals(intent)) {
                     mView.showContent(intent, value);
@@ -441,16 +445,12 @@ public class AIUIRepository {
             if (rstId == 1) {
                 JSONArray jsonArray = new JSONArray();
                 jsonArray.put(cntJson);
-                anlaysize(jsonArray.toString().getBytes());
+//                anlaysize(jsonArray.toString().getBytes());
             }
 
         } catch (JSONException e) {
             e.printStackTrace();
         }
-
-    }
-
-    private void anlaysize(byte[] bytes) {
 
     }
 
@@ -488,8 +488,8 @@ public class AIUIRepository {
         }
 
         if (null == mAIUIAgent) {
-            final String strErrorTip = "创建 AIUI失败！";
-            Toast.makeText(context, strErrorTip, 0).show();
+            final String strErrorTip = "语音服务出错！";
+            mView.showErrorMessage(strErrorTip);
         }
     }
 
